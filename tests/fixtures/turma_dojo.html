@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head><meta charset="UTF-8"><title>SIGA - Diário da Turma</title></head>
+<body>
+  <div id="menuBarformNotaParcialObject" data-dojo-type="dijit/MenuBar">
+    <div id="mbi1" data-dojo-type="dijit/MenuBarItem">Tipo De Calculo</div>
+    <div id="mbi2" data-dojo-type="dijit/MenuBarItem">TVC</div>
+    <div id="mbi3" data-dojo-type="dijit/MenuBarItem">Lançar Frequência</div>
+    <div id="mbi4" data-dojo-type="dijit/MenuBarItem">Quadro Geral</div>
+    <div id="mbi5" data-dojo-type="dijit/MenuBarItem">Retornar</div>
+  </div>
+  <script type="text/javascript">
+    manager.registerEvents([
+      ["mbi1","click","manager.doLinkButton(\"/index.php/siga/academico/nota/formTipoDeCalculo/12345\",\"mbi1\");", true, false],
+      ["mbi2","click","manager.doLinkButton(\"/index.php/siga/academico/nota/formTVCFind/12345\",\"mbi2\");", true, false],
+      ["mbi3","click","manager.doLinkButton(\"/index.php/siga/academico/nota/formLancarFrequencia/12345\",\"mbi3\");", true, false],
+      ["mbi4","click","manager.doLinkButton(\"/index.php/siga/academico/nota/formNotasParciaisFind/12345\",\"mbi4\");", true, false],
+      ["mbi5","click","manager.doLinkButton(\"/index.php/siga/academico/nota/formNotaParcialPasso2/?filter::idDocente=29230\",\"mbi5\");", true, false]
+    ]);
+  </script>
+</body>
+</html>

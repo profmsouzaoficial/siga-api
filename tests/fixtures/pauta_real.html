@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head><meta charset="UTF-8"><title>SIGA - Lançar Notas</title></head>
+<body>
+  <div id="centerPane">
+    <form id="form1" method="post">
+      <input type="text" name="tvc::tipoCalculo" value="Soma">
+      <input type="text" name="tvc::descricao" value="Exercício Avaliativo">
+      <input type="text" name="tvc::peso" value="10">
+      <input type="text" name="tvc::dataAplicacao" value="25/09/2026">
+      <input type="text" name="stats::media" value="9,9">
+      <input type="text" name="stats::desviopadrao" value="0,05">
+      <input type="hidden" name="tvc::idTVC" value="596505">
+      <input type="hidden" name="tvc::idTurma" value="1248384">
+      <table id="gridFind" class="grid">
+        <thead>
+          <tr><th>Matrícula</th><th>Nome</th><th>Nota</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>202506007GV</td>
+            <td>ALÉXIA KLARA ALVES DE SOUZA</td>
+            <td><input type="text" name="notas[9025341]" value="10"></td>
+          </tr>
+          <tr>
+            <td>202506015GV</td>
+            <td>FABIELLY SARAH ANDRADE FRANÇA</td>
+            <td><input type="text" name="notas[9025343]" value="9,5"></td>
+          </tr>
+          <tr>
+            <td>202412345GV</td>
+            <td>JOÃO PEDRO LIMA</td>
+            <td><input type="text" name="notas[9025347]" value=""></td>
+          </tr>
+        </tbody>
+      </table>
+    </form>
+  </div>
+</body>
+</html>

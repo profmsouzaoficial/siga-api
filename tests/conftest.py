@@ -106,6 +106,24 @@ def paginas_sem_quadro_geral():
 
 
 @pytest.fixture
+def paginas_estrutura_real():
+    """Páginas no formato efetivamente devolvido pelo SIGA (out/2026)."""
+    return {
+        "formNotasParciais/596505": ler("pauta_real.html"),
+        "formNotaParcialPasso1": ler("passo1_periodos.html"),
+        "formNotaParcialObject/12345": ler("turma_dojo.html"),
+        "formNotasParciaisFind": ler("quadro_geral_real.html"),
+        "formTVCFind": ler("tvc_grid_real.html"),
+        "buscaTurmas": ler("passo2_turmas.html"),
+    }
+
+
+@pytest.fixture
+def siga_estrutura_real(paginas_estrutura_real):
+    return SigaFake(paginas_estrutura_real)
+
+
+@pytest.fixture
 def siga_quadro_geral(paginas_quadro_geral):
     return SigaFake(paginas_quadro_geral)
 

@@ -7,9 +7,11 @@ from bs4 import BeautifulSoup
 from conftest import RespostaFalsa, SigaFake, ler
 
 from siga_bot import (
+    MATRICULA_RE,
     SigaAPI,
     SigaError,
     SigaNaoEncontrado,
+    _e_coluna_acao,
     _href_absoluto,
     _id_da_url,
     chave_busca,
@@ -325,3 +327,98 @@ def test_parse_pauta_sem_cabecalho_nao_confunde_situacao_com_nome():
     """
     registro = SigaAPI()._parse_pauta(html)[0]
     assert registro["nome"] == "JOSÉ LIMA"
+
+
+# ---------------------------------------------------------------------------
+# Estrutura real do SIGA (capturada em out/2026)
+# ---------------------------------------------------------------------------
+def test_localizar_quadro_geral_no_menu_dojo():
+    url = SigaAPI._localizar_link_quadro_geral(ler("turma_dojo.html"))
+    assert url is not None
+    assert url.endswith("/index.php/siga/academico/nota/formNotasParciaisFind/12345")
+
+
+def test_coluna_de_acao_nao_engole_avaliacao():
+    assert _e_coluna_acao("Consolidar") is True
+    assert _e_coluna_acao("Ações") is True
+    assert _e_coluna_acao("Avaliação 1") is False
+    assert _e_coluna_acao("Nota Final") is False
+
+
+def test_matricula_aceita_sufixo_de_campus():
+    assert MATRICULA_RE.match("202506007GV")
+    assert MATRICULA_RE.match("202506007")
+    assert not MATRICULA_RE.match("XYZ")
+
+
+def test_parse_quadro_geral_estrutura_real():
+    quadro = SigaAPI()._parse_quadro_geral(ler("quadro_geral_real.html"))
+
+    assert quadro["colunas_notas"] == ["Avaliação 1", "Avaliação 2"]
+    assert [a["matricula"] for a in quadro["alunos"]] == [
+        "202506007GV",
+        "202506015GV",
+        "202412345GV",
+    ]
+
+    primeiro = quadro["alunos"][0]
+    assert primeiro["notas"] == {"Avaliação 1": 10.0, "Avaliação 2": 16.0}
+    assert primeiro["frequencia"] == "FS"
+    assert primeiro["situacao"] == "Matriculado"
+    assert primeiro["nota_final"] is None
+    assert quadro["alunos"][2]["nota_final"] == 6.5
+
+    # A coluna "Consolidar" aparece na lista de colunas, mas nunca em notas.
+    assert "Consolidar" in quadro["colunas"]
+    assert all("Consolidar" not in aluno["notas"] for aluno in quadro["alunos"])
+
+
+def test_quadro_geral_mapeia_colunas_para_descricoes(siga_estrutura_real):
+    resultado = siga_estrutura_real.obter_quadro_notas("CBV018GV-A", "2026/3")
+
+    assert resultado["consulta"]["fonte"] == "quadro_geral"
+    assert [a["descricao"] for a in resultado["avaliacoes"]] == [
+        "Exercício Avaliativo",
+        "Prova 1",
+    ]
+    assert resultado["avaliacoes"][1]["peso"] == 20.0
+
+    primeiro = resultado["alunos"][0]
+    assert primeiro["matricula"] == "202506007GV"
+    assert primeiro["notas"] == {"Exercício Avaliativo": 10.0, "Prova 1": 16.0}
+    assert "Exercício Avaliativo" in resultado["colunas"]
+    assert "Avaliação 1" not in resultado["colunas"]
+
+    assert resultado["resumo"] == {
+        "total_alunos": 3,
+        "com_nota_final": 1,
+        "sem_nota_final": 2,
+        "media_nota_final": 6.5,
+        "situacoes": {"Matriculado": 2, "Aprovado": 1},
+    }
+
+
+def test_buscar_chave_aluno_aceita_formatos_diferentes():
+    alunos = {"202506007GV": {}, "202412345GV": {}}
+    assert SigaAPI._buscar_chave_aluno(alunos, "202506007GV") == "202506007GV"
+    assert SigaAPI._buscar_chave_aluno(alunos, "202506007") == "202506007GV"
+    assert SigaAPI._buscar_chave_aluno(alunos, "202506007.0") == "202506007GV"
+    assert SigaAPI._buscar_chave_aluno(alunos, "999") is None
+
+
+def test_lancar_notas_aceita_matricula_sem_sufixo(siga_estrutura_real):
+    resultado = siga_estrutura_real.lancar_notas(
+        turma="CBV018GV-A",
+        descricao_avaliacao="Exercício Avaliativo",
+        notas_json={"202506007": 8.0, "202506015GV": "9,5"},
+        periodo_texto="2026/3",
+    )
+
+    assert [lancado["matricula"] for lancado in resultado["lancados"]] == [
+        "202506007GV",
+        "202506015GV",
+    ]
+    enviado = siga_estrutura_real.salvamentos[-1]
+    assert enviado["tvc::idTVC"] == "596505"
+    assert enviado["notas[9025341]"] == "8"
+    assert enviado["notas[9025343]"] == "9.5"

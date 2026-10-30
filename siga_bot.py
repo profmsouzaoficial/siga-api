@@ -39,10 +39,11 @@ BASE_URL = "https://siga.ufjf.br"
 AUTH_URL = "https://auth.ufjf.br"
 URL_LOGIN = AUTH_URL + "/login?service=" + quote(BASE_URL + "/index.php", safe="")
 URL_PAINEL = BASE_URL + "/index.php"
-URL_PASSO1 = BASE_URL + "/siga/academico/nota/formNotaParcialPasso1/docente"
-URL_BUSCA_TURMAS = BASE_URL + "/siga/academico/nota/formNotaParcialPasso2"
-URL_TURMA = BASE_URL + "/siga/academico/nota/formNotaParcialObject/{}"
-URL_TVCS = BASE_URL + "/siga/academico/nota/formTVCFind/{}"
+URL_PASSO1 = BASE_URL + "/index.php/siga/academico/nota/formNotaParcialPasso1/docente"
+URL_BUSCA_TURMAS = BASE_URL + "/index.php/siga/academico/nota/formNotaParcialPasso2"
+URL_TURMA = BASE_URL + "/index.php/siga/academico/nota/formNotaParcialObject/{}"
+URL_TVCS = BASE_URL + "/index.php/siga/academico/nota/formTVCFind/{}"
+URL_QUADRO = BASE_URL + "/index.php/siga/academico/nota/formNotasParciaisFind/{}"
 
 LOGGER = logging.getLogger("siga_bot")
 
@@ -75,7 +76,7 @@ CHAVES_COLUNA = {
     "matricula": ("matric", "registro", "ra "),
     "nome": ("nome", "aluno", "discente"),
     "situacao": ("situac",),
-    "frequencia": ("frequen", "falta", "presenc", "comparec"),
+    "frequencia": ("frequen", "freq", "falta", "presenc", "comparec"),
     "nota_final": ("nota final", "final", "conceito final", "resultado final"),
     "media": ("media", "media parcial"),
     "peso": ("peso",),
@@ -94,7 +95,14 @@ PALAVRAS_STATUS = {
     "ativa", "inativo", "inativa", "cursando", "concluido", "concluida",
     "dispensado", "dispensada", "total", "sim", "nao",
 }
-MATRICULA_RE = re.compile(r"^\d{6,12}$")
+# Matrícula do SIGA pode ter sufixo de campus/curso: "202506007GV".
+MATRICULA_RE = re.compile(r"^\d{6,12}[A-Za-z]{0,4}$")
+# Colunas de ação (links/botões) não são notas. A comparação é por palavra
+# inteira: "acao" como substring casaria dentro de "Avaliação".
+PALAVRAS_ACAO = {
+    "consolidar", "acoes", "acao", "editar", "excluir", "remover",
+    "lancar", "salvar", "operacoes", "selecionar", "detalhar",
+}
 DATA_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
 NUMERO_RE = re.compile(r"^-?\d+(?:[.,]\d+)?")
 
@@ -227,6 +235,22 @@ def _resumo_linhas(linhas) -> str:
     return "; ".join(
         " | ".join(celula[:60] for celula in celulas[:4]) for _, celulas in linhas[:5]
     )
+
+
+def _e_coluna_acao(titulo: str) -> bool:
+    """True quando o título é uma coluna de ação (botão/link), não uma nota.
+
+    Compara palavra inteira; ``"acao" in "avaliacao"`` daria falso positivo.
+
+    >>> _e_coluna_acao("Consolidar")
+    True
+    >>> _e_coluna_acao("Avaliação 1")
+    False
+    """
+    alvo = chave_busca(titulo)
+    if alvo in PALAVRAS_ACAO:
+        return True
+    return any(alvo.startswith(palavra + " ") for palavra in PALAVRAS_ACAO)
 
 
 def _indice_por_chave(cabecalho: List[str], grupo: str) -> Optional[int]:
@@ -616,7 +640,7 @@ class SigaAPI:
         info = self._localizar_turma(turma, periodo)
         id_turma = info["id_turma"]
 
-        url_alvo = BASE_URL + "/siga/academico/nota/TVCSave/?go=formTVCFind"
+        url_alvo = BASE_URL + "/index.php/siga/academico/nota/TVCSave/?go=formTVCFind"
         referer = URL_TURMA.format(id_turma) + "?filter::idDepartamento="
 
         dados = dict(PAYLOAD_BASE)
@@ -729,16 +753,12 @@ class SigaAPI:
         invalidos: List[Dict[str, Any]] = []
 
         for matricula, nota in notas_json.items():
-            chave = str(matricula).strip()
-            aluno = alunos_por_matricula.get(chave)
-            if aluno is None:
-                # Tolerância para matrícula enviada como número (ex.: 202165001.0).
-                sufixo = chave.split(".")[0]
-                aluno = alunos_por_matricula.get(sufixo)
-            if aluno is None:
+            chave = self._buscar_chave_aluno(alunos_por_matricula, matricula)
+            if chave is None:
                 nao_encontrados.append(matricula)
                 continue
 
+            aluno = alunos_por_matricula[chave]
             valor = parse_numero(nota)
             if valor is None:
                 invalidos.append({"matricula": chave, "nota": nota})
@@ -758,7 +778,7 @@ class SigaAPI:
 
         resposta = self._request(
             "POST",
-            BASE_URL + "/siga/academico/nota/saveNotasParciais",
+            BASE_URL + "/index.php/siga/academico/nota/saveNotasParciais",
             data=dados,
             headers=self._headers_ajax(avaliacao["url"]),
         )
@@ -782,6 +802,30 @@ class SigaAPI:
             "nao_encontrados": nao_encontrados,
             "notas_invalidas": invalidos,
         }
+
+    @staticmethod
+    def _buscar_chave_aluno(alunos: Dict[str, Any], matricula: Any) -> Optional[str]:
+        """Encontra a matrícula do SIGA a partir da matrícula informada.
+
+        Aceita ``202506007GV`` (formato do SIGA), ``202506007`` (sem sufixo),
+        ``202506007.0`` (vindo de planilha) e casa pelo número quando o sufixo
+        foi omitido.
+        """
+        chave = str(matricula).strip()
+        if chave in alunos:
+            return chave
+
+        sem_decimal = chave.split(".")[0]
+        if sem_decimal in alunos:
+            return sem_decimal
+
+        digitos = re.sub(r"\D", "", sem_decimal)
+        if not digitos:
+            return None
+        candidatos = [existente for existente in alunos if re.sub(r"\D", "", existente) == digitos]
+        if len(candidatos) == 1:
+            return candidatos[0]
+        return None
 
     @staticmethod
     def _detectar_erro(html: str) -> Optional[str]:
@@ -832,7 +876,11 @@ class SigaAPI:
         fonte = None
 
         html_turma = self._get_html(url_turma, referer=URL_PASSO1)
-        url_quadro = self._localizar_link_quadro_geral(html_turma)
+        # Sempre há um caminho conhecido: se o menu mudar, usamos a URL direta.
+        url_quadro = (
+            self._localizar_link_quadro_geral(html_turma)
+            or URL_QUADRO.format(id_turma)
+        )
 
         if url_quadro:
             try:
@@ -842,6 +890,21 @@ class SigaAPI:
                     alunos = quadro["alunos"]
                     colunas = quadro["colunas"]
                     fonte = "quadro_geral"
+                    avaliacoes = self._avaliacoes_da_turma(id_turma, url_turma, avisos)
+                    # O Quadro Geral rotula as colunas como "Avaliação 1", "Avaliação 2"...
+                    # Quando a quantidade de TVCs bate, usamos as descrições reais.
+                    colunas_notas = quadro.get("colunas_notas") or []
+                    if avaliacoes and len(avaliacoes) == len(colunas_notas):
+                        mapa = {
+                            coluna: avaliacao["descricao"]
+                            for coluna, avaliacao in zip(colunas_notas, avaliacoes, strict=True)
+                        }
+                        for aluno in alunos:
+                            aluno["notas"] = {
+                                mapa.get(titulo, titulo): valor
+                                for titulo, valor in aluno["notas"].items()
+                            }
+                        colunas = [mapa.get(titulo, titulo) for titulo in colunas]
                 else:
                     avisos.append(
                         "Quadro Geral encontrado, mas nenhuma tabela de notas foi "
@@ -897,8 +960,16 @@ class SigaAPI:
 
     @staticmethod
     def _localizar_link_quadro_geral(html_turma: str) -> Optional[str]:
-        """Encontra o href do submenu "Quadro Geral" da página da turma."""
+        """Encontra a URL do submenu "Quadro Geral" da página da turma.
+
+        O SIGA é uma aplicação Dojo: os submenus são ``div`` (MenuBarItem) e a
+        navegação é registrada em JavaScript por ``doLinkButton("url","id")``.
+        Por isso não basta procurar ``<a href>``: é preciso casar o **texto** do
+        item com o **id** usado no handler.
+        """
         soup = BeautifulSoup(html_turma, "html.parser")
+
+        # 1. Caminho clássico: link comum.
         for link in soup.find_all("a"):
             texto = chave_busca(link.get_text(" ", strip=True))
             titulo = chave_busca(link.get("title") or "")
@@ -906,7 +977,39 @@ class SigaAPI:
                 href = link.get("href") or ""
                 if href and not href.lower().startswith("javascript"):
                     return _href_absoluto(href)
+
+        # 2. Menu Dojo: mapeia elemento -> URL e depois casa pelo texto.
+        handlers: Dict[str, str] = {}
+        # No HTML real as aspas vêm escapadas (\"url\",\"id\"), pois o handler
+        # está dentro de uma string JavaScript.
+        padrao = re.compile(
+            r'do(?:LinkButton|Get)\(\s*\\?"([^"\\]+)\\?"\s*,\s*\\?"([^"\\]*)\\?"'
+        )
+        for script in soup.find_all("script"):
+            for achado in padrao.finditer(script.get_text()):
+                handlers[achado.group(2)] = achado.group(1)
+
+        for elemento in soup.find_all(id=True):
+            url = handlers.get(str(elemento.get("id")))
+            if not url:
+                continue
+            if "quadro geral" in chave_busca(elemento.get_text(" ", strip=True)):
+                return _href_absoluto(url)
         return None
+
+    def _avaliacoes_da_turma(
+        self, id_turma: str, url_turma: str, avisos: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Lê a grade de TVCs só para enriquecer o quadro (melhor esforço)."""
+        try:
+            html_tvcs = self._get_html(URL_TVCS.format(id_turma), referer=url_turma)
+        except SigaError as erro:
+            avisos.append(f"Não foi possível listar as TVCs: {erro}")
+            return []
+        avaliacoes = self._parse_avaliacoes(html_tvcs)
+        for avaliacao in avaliacoes:
+            avaliacao.pop("url", None)
+        return avaliacoes
 
     def _quadro_por_tvc(
         self, id_turma: str, url_turma: str, avisos: List[str]
@@ -1155,7 +1258,9 @@ class SigaAPI:
         # tenha casado com os grupos conhecidos.
         for i, titulo in enumerate(cabecalho):
             alvo = chave_busca(titulo)
-            if any(chave in alvo for chave in ("falt", "frequen", "presenc", "comparec")):
+            if any(chave in alvo for chave in ("falt", "frequen", "freq", "presenc", "comparec")):
+                conhecidas.add(i)
+            if _e_coluna_acao(titulo):
                 conhecidas.add(i)
 
         colunas_notas = [
@@ -1199,7 +1304,11 @@ class SigaAPI:
                 aluno["nota_final"] = aluno.get("media")
 
         colunas = [cabecalho[i] for i in range(len(cabecalho)) if cabecalho[i]]
-        return {"alunos": alunos, "colunas": colunas}
+        return {
+            "alunos": alunos,
+            "colunas": colunas,
+            "colunas_notas": [titulo for _, titulo in colunas_notas],
+        }
 
     # ------------------------------------------------------------------
     # Auxiliares de parsing

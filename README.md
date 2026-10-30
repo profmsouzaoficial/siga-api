@@ -119,40 +119,45 @@ ou
     "gerado_em": "2026-10-30T18:05:00+00:00",
     "requisicoes": 4
   },
-  "avaliacoes": [],
-  "colunas": ["Matrícula", "Nome", "TVC 1", "TVC 2", "TVC 3", "Nota Final", "Frequência", "Situação"],
+  "avaliacoes": [
+    {"id": "596505", "descricao": "Exercício Avaliativo", "peso": 10.0, "data": "25/09/2026"},
+    {"id": "596506", "descricao": "Prova 1", "peso": 20.0, "data": "25/09/2026"}
+  ],
+  "colunas": ["Matrícula", "Nome", "Exercício Avaliativo", "Prova 1", "Nota Final", "Freq", "Situação", "Consolidar"],
   "alunos": [
     {
-      "matricula": "202165001",
-      "nome": "ANA BEATRIZ SOUZA",
-      "notas": {"TVC 1": 8.5, "TVC 2": 9.0, "TVC 3": 7.5},
-      "nota_final": 8.3,
+      "matricula": "202506007GV",
+      "nome": "ALÉXIA KLARA ALVES DE SOUZA",
+      "notas": {"Exercício Avaliativo": 10.0, "Prova 1": 16.0},
+      "nota_final": null,
       "media": null,
-      "frequencia": "100,0",
-      "situacao": "Aprovado"
+      "frequencia": "FS",
+      "situacao": "Matriculado"
     },
     {
-      "matricula": "202033002",
-      "nome": "BRUNO CARVALHO LIMA",
-      "notas": {"TVC 1": 6.0, "TVC 2": 5.5, "TVC 3": null},
-      "nota_final": 5.8,
+      "matricula": "202506015GV",
+      "nome": "FABIELLY SARAH ANDRADE FRANÇA",
+      "notas": {"Exercício Avaliativo": 9.5, "Prova 1": 12.0},
+      "nota_final": null,
       "media": null,
-      "frequencia": "87,5",
-      "situacao": "Reprovado por nota"
+      "frequencia": "FS",
+      "situacao": "Matriculado"
     }
   ],
   "resumo": {
     "total_alunos": 2,
-    "com_nota_final": 2,
-    "sem_nota_final": 0,
-    "media_nota_final": 7.05,
-    "situacoes": {"Aprovado": 1, "Reprovado por nota": 1}
+    "com_nota_final": 0,
+    "sem_nota_final": 2,
+    "media_nota_final": null,
+    "situacoes": {"Matriculado": 2}
   },
   "avisos": []
 }
 ```
 
-*No exemplo acima o quadro veio do Quadro Geral (`fonte: "quadro_geral"`), que não expõe a lista de TVCs na mesma página — por isso `avaliacoes` vem vazio. No modo alternativo (`fonte: "tvc_por_avaliacao"`) essa lista vem preenchida com `id`, `descricao`, `peso` e `data`.*
+*O Quadro Geral do SIGA rotula as colunas como "Avaliação 1", "Avaliação 2"... A API lê a grade de TVCs em paralelo e, quando a quantidade de avaliações confere, substitui os rótulos genéricos pelas descrições reais (como no exemplo). Se não conferir, mantém os rótulos do SIGA e avisa em `avisos`.*
+
+*Detalhes do SIGA real que a API preserva: a **matrícula pode ter sufixo de campus** (`202506007GV`); a coluna de peso é na verdade **"Peso/Valor"** (pontos da avaliação, podem passar de 10); `Freq` é um código do SIGA (ex.: `FS`); e a **Nota Final fica `null` até o professor consolidar** a turma.*
 
 **Campos da resposta:**
 
@@ -160,12 +165,12 @@ ou
 |---|---|
 | `consulta.fonte` | `quadro_geral` (leu o Quadro Geral do SIGA) ou `tvc_por_avaliacao` (montou o quadro percorrendo as TVCs). |
 | `consulta.gerado_em` | Data/hora da consulta em ISO 8601 (UTC). |
-| `avaliacoes` | Avaliações (TVCs) da turma: ID, descrição, peso e data. `[]` quando o quadro veio do Quadro Geral e o SIGA não expõe essa lista na mesma página. |
+| `avaliacoes` | Avaliações (TVCs) da turma: ID, descrição, `peso` (valor/pontos), data. |
 | `colunas` | Ordem das colunas como estão no SIGA — útil para montar planilha/tabela. |
-| `alunos[].notas` | Nota por avaliação. `null` = sem nota lançada. |
-| `alunos[].nota_final` | Nota final calculada pelo SIGA. `null` se ainda não calculada. |
+| `alunos[].notas` | Nota por avaliação, com o nome da avaliação como chave. `null` = sem nota lançada. |
+| `alunos[].nota_final` | Nota final calculada pelo SIGA. `null` enquanto a turma não for consolidada. |
 | `alunos[].media` | Média parcial mostrada pelo SIGA, quando existir. |
-| `alunos[].frequencia` / `situacao` | Valores textuais exatamente como o SIGA exibe. |
+| `alunos[].frequencia` / `situacao` | Códigos/valores exatamente como o SIGA exibe (ex.: `FS`, `Matriculado`). |
 | `resumo` | Totais e média apenas das notas finais **efetivamente retornadas**. |
 | `avisos` | Lista de avisos (ex.: Quadro Geral indisponível, TVC sem pauta). A resposta continua válida. |
 
@@ -175,8 +180,9 @@ ou
 1. Autentica no CAS (`auth.ufjf.br`) e mantém a sessão.
 2. Traduz o período (`2026/3`) para o ID interno do SIGA (`268`).
 3. Localiza a turma na grade do professor e obtém o ID interno da turma.
-4. Tenta o submenu **Quadro Geral** da turma — a tela que o próprio SIGA descreve como "visão geral de todas as notas parciais e finais, além da frequência e situação dos alunos".
-5. Se o Quadro Geral não existir ou não for reconhecido, monta o mesmo quadro percorrendo cada TVC e cada pauta (o mesmo HTML que a rota de lançamento já usava). O resultado vem com `fonte: "tvc_por_avaliacao"` e um aviso explicando o motivo.
+4. Abre o submenu **Quadro Geral** — a tela que o próprio SIGA descreve como "visão geral de todas as notas parciais e finais, além da frequência e situação dos alunos". No SIGA real esse submenu é um item Dojo (não é um `<a href>`): a API lê o handler `doLinkButton(...)` no JavaScript e descobre a URL `formNotasParciaisFind/{id_turma}`; se o menu mudar, ela usa essa URL diretamente como reserva.
+5. Lê também a grade de **TVCs** (`formTVCFind/{id_turma}`) para preencher `avaliacoes` e trocar os rótulos genéricos ("Avaliação 1") pelas descrições reais, quando as quantidades conferem.
+6. Se o Quadro Geral não existir ou não for reconhecido, monta o mesmo quadro percorrendo cada TVC e cada pauta (o mesmo HTML que a rota de lançamento já usava). O resultado vem com `fonte: "tvc_por_avaliacao"` e um aviso explicando o motivo.
 
 ### 2. Lançar Notas
 `POST /api/lancar-notas`
@@ -275,6 +281,18 @@ O script faz login, imprime o JSON do quadro e salva **cada HTML recebido** em `
 - O `.env` e a pasta `debug_html/` estão no `.gitignore`.
 
 ---
+
+## 📝 O que mudou na versão 1.1.1
+
+Correções encontradas ao testar contra o SIGA **real** (turma `CBV018GV-A`, período `2026/3`):
+
+- **URLs sem `/index.php`**: as páginas acadêmicas retornavam 404. Corrigido em todas as rotas (passo 1, busca de turmas, turma, TVCs e salvamento).
+- **Quadro Geral não era encontrado**: o submenu é um item Dojo (`MenuBarItem` + `doLinkButton`), não um `<a href>`. A API agora lê o handler em JavaScript e ainda tem a URL `formNotasParciaisFind/{id_turma}` como reserva.
+- **Matrícula com sufixo de campus** (`202506007GV`) era rejeitada pelo filtro que só aceitava dígitos — a turma inteira era descartada. Corrigido, e o lançamento de notas agora aceita a matrícula com ou sem o sufixo.
+- **Coluna "Avaliação 1" era confundida com coluna de ação** (o filtro testava a substring `"acao"`, que existe dentro de "avaliação") e as notas eram descartadas. A comparação passou a ser por palavra inteira.
+- **Coluna `Freq`** não era reconhecida como frequência (o parser exigia "frequência"/"falta"); passou a aceitar `Freq` e a ignorar colunas de ação como `Consolidar`.
+- **Rótulos genéricos**: as colunas de nota eram expostas como "Avaliação 1/2"; agora recebem as descrições reais das TVCs quando a contagem confere.
+- Validado de ponta a ponta: **7 alunos, 2 avaliações, 1,5 s e 8 requisições**.
 
 ## 📝 O que mudou na versão 1.1.0
 

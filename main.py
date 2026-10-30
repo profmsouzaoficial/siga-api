@@ -38,7 +38,7 @@ LOGGER = logging.getLogger("auto_siga_api")
 
 app = FastAPI(
     title="API AUTO-SIGA UFJF (HTTP Direto)",
-    version="1.1.0",
+    version="1.1.1",
     description=(
         "Automação não oficial do SIGA/UFJF via HTTP direto, sem navegador. "
         "Exige o cabeçalho X-API-Key em todas as rotas /api/*."
