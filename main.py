@@ -38,7 +38,7 @@ LOGGER = logging.getLogger("auto_siga_api")
 
 app = FastAPI(
     title="API AUTO-SIGA UFJF (HTTP Direto)",
-    version="1.1.1",
+    version="1.1.2",
     description=(
         "Automação não oficial do SIGA/UFJF via HTTP direto, sem navegador. "
         "Exige o cabeçalho X-API-Key em todas as rotas /api/*."
@@ -187,7 +187,8 @@ def raiz():
 
 @app.get("/health", tags=["infra"], summary="Verificação de saúde")
 def health():
-    return {"status": "ok"}
+    """Responde 200 e informa a versão publicada (útil para confirmar deploys)."""
+    return {"status": "ok", "versao": app.version}
 
 
 @app.get(

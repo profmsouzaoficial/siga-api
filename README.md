@@ -58,7 +58,7 @@ O container já traz um `HEALTHCHECK` apontando para `/health`, útil no Coolify
 ### 4. Verificar se subiu
 ```bash
 curl http://localhost:8000/health
-# {"status":"ok"}
+# {"status":"ok","versao":"1.1.2"}
 ```
 
 ---
@@ -92,7 +92,7 @@ Para utilizar as rotas `/api/*`, autentique-se no botão **Authorize** usando a 
 | Rota | Descrição |
 |---|---|
 | `GET /` | Identificação do serviço e versão. |
-| `GET /health` | Verificação de saúde (`{"status": "ok"}`), usada pelo Docker/Coolify. |
+| `GET /health` | Verificação de saúde com a versão publicada (`{"status":"ok","versao":"1.1.2"}`), usada pelo Docker/Coolify. |
 
 ### 1. Quadro de Notas da Turma ⭐ (novo na 1.1)
 `GET /api/notas?turma=CBV018GV-A&periodo=2026/3`
@@ -281,6 +281,10 @@ O script faz login, imprime o JSON do quadro e salva **cada HTML recebido** em `
 - O `.env` e a pasta `debug_html/` estão no `.gitignore`.
 
 ---
+
+## 📝 O que mudou na versão 1.1.2
+
+- `GET /health` passou a informar a versão publicada (`{"status":"ok","versao":"1.1.2"}`), o que permite confirmar em segundos se o deploy automático entrou no ar.
 
 ## 📝 O que mudou na versão 1.1.1
 

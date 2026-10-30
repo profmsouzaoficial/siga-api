@@ -104,7 +104,9 @@ def fabrica_siga(resultado=None, erro=None, erro_login=None):
 # Infraestrutura e autenticação
 # ---------------------------------------------------------------------------
 def test_raiz_e_health_sem_chave(cliente):
-    assert cliente.get("/health").json() == {"status": "ok"}
+    health = cliente.get("/health").json()
+    assert health["status"] == "ok"
+    assert health["versao"] == main.app.version
     assert cliente.get("/").json()["servico"] == "API AUTO-SIGA UFJF"
 
 
